@@ -121,17 +121,46 @@ def handle_file(update: Update, context: CallbackContext) -> None:
             file_id = generate_file_id(user_id, forwarded.message_id)
             file_count += 1
             bot_username = context.bot.username
+
+            # --- Extract details ---
+            file_name = "Unknown"
+            file_size = "Unknown"
+            file_type = "Media"
+
+            if message.document:
+                file_name = message.document.file_name
+                file_size = f"{round(message.document.file_size / (1024 * 1024), 2)} MB"
+                file_type = "Document"
+            elif message.photo:
+                file_name = "Photo"
+                file_type = "Photo"
+            elif message.video:
+                file_name = "Video"
+                file_size = f"{round(message.video.file_size / (1024 * 1024), 2)} MB"
+                file_type = "Video"
+            elif message.audio:
+                file_name = message.audio.file_name or "Audio"
+                file_size = f"{round(message.audio.file_size / (1024 * 1024), 2)} MB"
+                file_type = "Audio"
+
+            # --- Send beautiful message ---
             message.reply_text(
-                f"🎉 *File Uploaded!*\n\n"
-                f"🔗 Direct Link:\n"
-                f"`https://t.me/{bot_username}?start={file_id}`\n\n"
-                f"🌟 Powered by @BhramsBots",
+                f"🎉 *Hurray !! Your File has been Uploaded to Our Server*\n\n"
+                f"📂 *File Name:* `{file_name}`\n"
+                f"📊 *File Size:* {file_size}\n\n"
+                f"🔗 *Here is Your Direct Link:*\n"
+                f"https://telegram.me/{bot_username}?start={file_id}\n\n"
+                f"🌟 *Powered By* @BhramsBots\n\n"
+                f"📁 *Type:* {file_type}\n"
+                f"🚸 *Note:* Your Link is Stored Safely Until Admins Action !",
                 parse_mode="MARKDOWN",
                 disable_web_page_preview=True
             )
+
         except Exception as e:
             logger.error(f"Upload error: {e}")
             message.reply_text("❌ Failed to save your file. Try again.")
+
 
 # ---------- Flask Webhook Setup ----------
 app = Flask(__name__)
