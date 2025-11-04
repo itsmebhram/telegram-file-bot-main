@@ -48,20 +48,19 @@ def save_user(user_id: int) -> None:
 def start(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
     save_user(user_id)
-    args = context.args  # get arguments if user clicked file link
+    args = context.args  # if user clicked file link
 
     # --- If user clicked a file link ---
     if args:
         try:
             file_id = args[0]
             parts = file_id.split("_")
-
             if len(parts) == 3:
                 _, original_user, message_id = parts
                 original_user = int(original_user)
                 message_id = int(message_id)
 
-                # Forward the stored file from group to user
+                # Retrieve stored file from group
                 bot.copy_message(chat_id=user_id, from_chat_id=GROUP_CHAT_ID, message_id=message_id)
 
                 update.message.reply_text(
@@ -70,17 +69,15 @@ def start(update: Update, context: CallbackContext) -> None:
                     parse_mode="MARKDOWN"
                 )
                 return
-
             else:
                 update.message.reply_text("⚠️ Invalid or expired link.")
                 return
-
         except Exception as e:
             logger.error(f"Error retrieving file: {e}")
             update.message.reply_text("❌ File not found or may have been removed.")
             return
 
-    # --- Default welcome message (same as your original) ---
+    # --- Default welcome message (unchanged) ---
     update.message.reply_text(
         "👋 Hi <b>ɮɦʀǟʍ ( ब्रह्म )</b>!\n\n"
         "✨ <b>Welcome to Free Storage Bot!</b> ✨\n\n"
@@ -93,7 +90,7 @@ def start(update: Update, context: CallbackContext) -> None:
         parse_mode="HTML"
     )
 
-
+# ---------- Other Commands ----------
 def help_command(update: Update, context: CallbackContext) -> None:
     bot_username = context.bot.username
     update.message.reply_text(
@@ -111,36 +108,7 @@ def stats(update: Update, context: CallbackContext) -> None:
         parse_mode="MARKDOWN"
     )
 
-def announce(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    if user_id != ADMIN_ID:
-        update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-    if not update.message.reply_to_message:
-        update.message.reply_text("❌ You must reply to a message to announce it.")
-        return
-
-    try:
-        with open(USERS_FILE, "r") as f:
-            users = set(line.strip() for line in f if line.strip())
-    except FileNotFoundError:
-        update.message.reply_text("❌ No users found to announce to.")
-        return
-
-    announcement_msg = update.message.reply_to_message
-    success, failed = 0, 0
-
-    for uid in users:
-        try:
-            bot.copy_message(chat_id=int(uid), from_chat_id=announcement_msg.chat_id, message_id=announcement_msg.message_id)
-            success += 1
-            time.sleep(0.1)
-        except Exception as e:
-            logger.warning(f"Failed to send to {uid}: {e}")
-            failed += 1
-
-    update.message.reply_text(f"✅ Sent to {success} users.\n❌ Failed: {failed}")
-
+# ---------- File Upload Handler ----------
 def handle_file(update: Update, context: CallbackContext) -> None:
     global file_count
     message = update.message
@@ -149,12 +117,18 @@ def handle_file(update: Update, context: CallbackContext) -> None:
 
     if message.document or message.photo or message.video or message.audio:
         try:
-            forwarded = message.forward(chat_id=GROUP_CHAT_ID)
-            file_id = generate_file_id(user_id, forwarded.message_id)
+            # Copy message instead of forwarding
+            copied_msg = bot.copy_message(
+                chat_id=GROUP_CHAT_ID,
+                from_chat_id=message.chat_id,
+                message_id=message.message_id
+            )
+
+            file_id = generate_file_id(user_id, copied_msg.message_id)
             file_count += 1
             bot_username = context.bot.username
 
-            # --- Extract details ---
+            # Extract details
             file_name = "Unknown"
             file_size = "Unknown"
             file_type = "Media"
@@ -175,13 +149,14 @@ def handle_file(update: Update, context: CallbackContext) -> None:
                 file_size = f"{round(message.audio.file_size / (1024 * 1024), 2)} MB"
                 file_type = "Audio"
 
-            # --- Send beautiful message ---
+            link = f"https://t.me/{bot_username}?start={file_id}"
+
             message.reply_text(
                 f"🎉 *Hurray !! Your File has been Uploaded to Our Server*\n\n"
                 f"📂 *File Name:* `{file_name}`\n"
                 f"📊 *File Size:* {file_size}\n\n"
                 f"🔗 *Here is Your Direct Link:*\n"
-                f"https://telegram.me/{bot_username}?start={file_id}\n\n"
+                f"`{link}`\n\n"
                 f"🌟 *Powered By* @BhramsBots\n\n"
                 f"📁 *Type:* {file_type}\n"
                 f"🚸 *Note:* Your Link is Stored Safely Until Admins Action !",
@@ -193,8 +168,7 @@ def handle_file(update: Update, context: CallbackContext) -> None:
             logger.error(f"Upload error: {e}")
             message.reply_text("❌ Failed to save your file. Try again.")
 
-
-# ---------- Flask Webhook Setup ----------
+# ---------- Flask Setup ----------
 app = Flask(__name__)
 
 @app.route("/")
@@ -208,12 +182,10 @@ def webhook():
     return "ok", 200
 
 # ---------- Dispatcher ----------
-from telegram.ext import Dispatcher
 dispatcher = Dispatcher(bot, None, workers=4)
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("help", help_command))
 dispatcher.add_handler(CommandHandler("stats", stats))
-dispatcher.add_handler(CommandHandler("announce", announce))
 dispatcher.add_handler(MessageHandler(Filters.all & ~Filters.command, handle_file))
 
 # ---------- Main ----------
