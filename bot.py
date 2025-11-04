@@ -48,7 +48,39 @@ def save_user(user_id: int) -> None:
 def start(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
     save_user(user_id)
+    args = context.args  # get arguments if user clicked file link
 
+    # --- If user clicked a file link ---
+    if args:
+        try:
+            file_id = args[0]
+            parts = file_id.split("_")
+
+            if len(parts) == 3:
+                _, original_user, message_id = parts
+                original_user = int(original_user)
+                message_id = int(message_id)
+
+                # Forward the stored file from group to user
+                bot.copy_message(chat_id=user_id, from_chat_id=GROUP_CHAT_ID, message_id=message_id)
+
+                update.message.reply_text(
+                    "📥 *Here’s your file!*\n"
+                    "⚠️ Do not share this link publicly — it’s unique to your file.",
+                    parse_mode="MARKDOWN"
+                )
+                return
+
+            else:
+                update.message.reply_text("⚠️ Invalid or expired link.")
+                return
+
+        except Exception as e:
+            logger.error(f"Error retrieving file: {e}")
+            update.message.reply_text("❌ File not found or may have been removed.")
+            return
+
+    # --- Default welcome message (same as your original) ---
     update.message.reply_text(
         "👋 Hi <b>ɮɦʀǟʍ ( ब्रह्म )</b>!\n\n"
         "✨ <b>Welcome to Free Storage Bot!</b> ✨\n\n"
