@@ -66,7 +66,7 @@ def is_banned(user_id):
 def start(update: Update, context: CallbackContext) -> None:
     # 1️⃣ BLOCK BANNED USERS HERE
     if is_banned(update.effective_user.id):
-        return update.message.reply_text("⛔ You are banned from using this bot.")
+        return update.message.reply_text("⛔ You are banned from using this bot because of uploading adult content.")
 
     # 2️⃣ Continue as normal
     user_id = update.effective_user.id
@@ -89,11 +89,41 @@ def start(update: Update, context: CallbackContext) -> None:
                     message_id=message_id
                 )
 
-                update.message.reply_text(
-                    "📥 *Here’s your file!*\n"
-                    "⚠️ Do not share this link.",
-                    parse_mode="MARKDOWN"
-                )
+             # Extract file details
+file_name = "Unknown"
+file_size = "Unknown"
+file_type = "Media"
+
+if message.document:
+    file_name = message.document.file_name
+    file_size = f"{round(message.document.file_size / (1024 * 1024), 2)} MB"
+    file_type = "Document"
+elif message.photo:
+    file_name = "Photo"
+    file_type = "Photo"
+elif message.video:
+    file_name = "Video"
+    file_size = f"{round(message.video.file_size / (1024 * 1024), 2)} MB"
+    file_type = "Video"
+elif message.audio:
+    file_name = message.audio.file_name or "Audio"
+    file_size = f"{round(message.audio.file_size / (1024 * 1024), 2)} MB"
+    file_type = "Audio"
+
+# Respond to user with detailed message
+message.reply_text(
+    f"🎉 *Hurray !! Your File has been Uploaded to Our Server*\n\n"
+    f"📂 *File Name:* `{file_name}`\n"
+    f"📊 *File Size:* {file_size}\n\n"
+    f"🔗 *Here is Your Direct Link:*\n"
+    f"`{link}`\n\n"
+    f"🌟 *Powered By* @BhramsBots\n\n"
+    f"📁 *Type:* {file_type}\n"
+    f"🚸 *Note:* Your Link is Stored Safely Until Admins Action !",
+    parse_mode="MARKDOWN",
+    disable_web_page_preview=True
+)
+
                 return
 
             else:
