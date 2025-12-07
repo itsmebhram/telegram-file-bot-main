@@ -11,6 +11,8 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "-1002909394259"))
 ADMIN_ID = int(os.getenv("ADMIN_ID", "1317903617"))
 USERS_FILE = os.getenv("USERS_FILE", "users.txt")
+BANNED_FILE = "banned.txt"   # <-- ADD THIS LINE HERE
+
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable is missing!")
@@ -43,13 +45,35 @@ def save_user(user_id: int) -> None:
     except Exception as e:
         logger.error(f"Error saving user {user_id}: {e}")
 
+def load_banned():
+    if not os.path.exists(BANNED_FILE):
+        return set()
+    with open(BANNED_FILE, "r") as f:
+        return set(line.strip() for line in f if line.strip())
+
+def save_banned(user_id):
+    banned = load_banned()
+    if str(user_id) not in banned:
+        with open(BANNED_FILE, "a") as f:
+            f.write(f"{user_id}\n")
+
+def is_banned(user_id):
+    banned = load_banned()
+    return str(user_id) in banned
+
+
 # ---------- /start Handler ----------
 def start(update: Update, context: CallbackContext) -> None:
+    # 1️⃣ BLOCK BANNED USERS HERE
+    if is_banned(update.effective_user.id):
+        return update.message.reply_text("⛔ You are banned from using this bot.")
+
+    # 2️⃣ Continue as normal
     user_id = update.effective_user.id
     save_user(user_id)
     args = context.args  # if user clicked file link
 
-    # --- If user clicked a file link ---
+    # 3️⃣ File retrieval section
     if args:
         try:
             file_id = args[0]
@@ -59,28 +83,34 @@ def start(update: Update, context: CallbackContext) -> None:
                 original_user = int(original_user)
                 message_id = int(message_id)
 
-                bot.copy_message(chat_id=user_id, from_chat_id=GROUP_CHAT_ID, message_id=message_id)
+                bot.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=GROUP_CHAT_ID,
+                    message_id=message_id
+                )
 
                 update.message.reply_text(
                     "📥 *Here’s your file!*\n"
-                    "⚠️ Do not share this link publicly — it’s unique to your file.",
+                    "⚠️ Do not share this link.",
                     parse_mode="MARKDOWN"
                 )
                 return
+
             else:
                 update.message.reply_text("⚠️ Invalid or expired link.")
                 return
+
         except Exception as e:
             logger.error(f"Error retrieving file: {e}")
-            update.message.reply_text("❌ File not found or may have been removed.")
+            update.message.reply_text("❌ File not found.")
             return
 
-    # -------- Dynamic Username --------
+    # 4️⃣ Normal welcome message (with dynamic username)
     first = update.effective_user.first_name
     username = update.effective_user.username
     raw = first or username or "User"
-
     short_name = raw.strip().split()[0].capitalize()
+
     if len(short_name) > 20:
         short_name = short_name[:19] + "…"
 
@@ -131,6 +161,38 @@ def announce(update: Update, context: CallbackContext):
         f"✅ Broadcast Complete!\nSent: {sent}\nFailed: {failed}"
     )
 
+def ban(update: Update, context: CallbackContext):
+    if update.effective_user.id != ADMIN_ID:
+        return update.message.reply_text("⛔ Admin only.")
+
+    if not context.args:
+        return update.message.reply_text("Usage: /ban <user_id>")
+
+    target = context.args[0]
+    save_banned(target)
+
+    update.message.reply_text(f"🚫 User {target} has been banned.")
+
+
+def unban(update: Update, context: CallbackContext):
+    if update.effective_user.id != ADMIN_ID:
+        return update.message.reply_text("⛔ Admin only.")
+
+    if not context.args:
+        return update.message.reply_text("Usage: /unban <user_id>")
+
+    target = context.args[0]
+    banned = load_banned()
+
+    if target in banned:
+        banned.remove(target)
+        with open(BANNED_FILE, "w") as f:
+            f.write("\n".join(banned))
+
+        update.message.reply_text(f"✅ User {target} is unbanned.")
+    else:
+        update.message.reply_text("User was not banned.")
+
 
 # ---------- /help ----------
 def help_command(update: Update, context: CallbackContext) -> None:
@@ -149,24 +211,46 @@ def handle_file(update: Update, context: CallbackContext) -> None:
     global file_count
     message = update.message
     user_id = message.from_user.id
+
+    # Check banned user
+    if is_banned(user_id):
+        return message.reply_text("⛔ You are banned and cannot upload files.")
+
     save_user(user_id)
 
+    user_name = message.from_user.full_name or message.from_user.username or "Unknown User"
+
     try:
+        # 1️⃣ Send identity info to your GROUP/CHANNEL before file
+        bot.send_message(
+            chat_id=GROUP_CHAT_ID,
+            text=(
+                "📨 <b>New Upload Received</b>\n"
+                f"👤 <b>User:</b> {user_name}\n"
+                f"🆔 <b>User ID:</b> <code>{user_id}</code>\n\n"
+                "⬇️ File below:"
+            ),
+            parse_mode="HTML"
+        )
+
+        # 2️⃣ Copy actual media/file to your group
         copied_msg = bot.copy_message(
             chat_id=GROUP_CHAT_ID,
             from_chat_id=message.chat_id,
             message_id=message.message_id
         )
 
+        # 3️⃣ File link generation
         file_id = generate_file_id(user_id, copied_msg.message_id)
         file_count += 1
         bot_username = context.bot.username
-
         link = f"https://t.me/{bot_username}?start={file_id}"
 
+        # 4️⃣ Reply to user
         message.reply_text(
             f"🎉 Your file is uploaded!\n\n"
-            f"🔗 Direct Link:\n`{link}`",
+            f"🔗 Direct Link:\n`{link}`\n"
+            f"🆔 Your User ID: `{user_id}`",
             parse_mode="MARKDOWN",
             disable_web_page_preview=True
         )
@@ -174,6 +258,7 @@ def handle_file(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         logger.error(f"Upload error: {e}")
         message.reply_text("❌ Failed to save your file. Try again.")
+
 
 # ---------- Flask Setup ----------
 app = Flask(__name__)
@@ -191,6 +276,8 @@ def webhook():
 # ---------- Dispatcher ----------
 dispatcher = Dispatcher(bot, None, workers=4)
 dispatcher.add_handler(CommandHandler("start", start))
+dispatcher.add_handler(CommandHandler("ban", ban))
+dispatcher.add_handler(CommandHandler("unban", unban))
 dispatcher.add_handler(CommandHandler("announce", announce))
 dispatcher.add_handler(CommandHandler("help", help_command))
 dispatcher.add_handler(MessageHandler(Filters.all & ~Filters.command, handle_file))
