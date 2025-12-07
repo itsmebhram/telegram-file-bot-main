@@ -11,8 +11,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "-1002909394259"))
 ADMIN_ID = int(os.getenv("ADMIN_ID", "1317903617"))
 USERS_FILE = os.getenv("USERS_FILE", "users.txt")
-BANNED_FILE = "banned.txt"   # <-- ADD THIS LINE HERE
-
+BANNED_FILE = "banned.txt"   # <--- banned users list
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable is missing!")
@@ -64,16 +63,15 @@ def is_banned(user_id):
 
 # ---------- /start Handler ----------
 def start(update: Update, context: CallbackContext) -> None:
-    # 1️⃣ BLOCK BANNED USERS HERE
+    # Block banned users
     if is_banned(update.effective_user.id):
-        return update.message.reply_text("⛔ You are banned from using this bot because of uploading adult content.")
+        return update.message.reply_text("⛔ You are banned from using this bot because of sending inappropriate content.")
 
-    # 2️⃣ Continue as normal
     user_id = update.effective_user.id
     save_user(user_id)
-    args = context.args  # if user clicked file link
+    args = context.args  # deep link
 
-    # 3️⃣ File retrieval section
+    # --- File Retrieval Section ---
     if args:
         try:
             file_id = args[0]
@@ -89,53 +87,19 @@ def start(update: Update, context: CallbackContext) -> None:
                     message_id=message_id
                 )
 
-             # Extract file details
-file_name = "Unknown"
-file_size = "Unknown"
-file_type = "Media"
-
-if message.document:
-    file_name = message.document.file_name
-    file_size = f"{round(message.document.file_size / (1024 * 1024), 2)} MB"
-    file_type = "Document"
-elif message.photo:
-    file_name = "Photo"
-    file_type = "Photo"
-elif message.video:
-    file_name = "Video"
-    file_size = f"{round(message.video.file_size / (1024 * 1024), 2)} MB"
-    file_type = "Video"
-elif message.audio:
-    file_name = message.audio.file_name or "Audio"
-    file_size = f"{round(message.audio.file_size / (1024 * 1024), 2)} MB"
-    file_type = "Audio"
-
-# Respond to user with detailed message
-message.reply_text(
-    f"🎉 *Hurray !! Your File has been Uploaded to Our Server*\n\n"
-    f"📂 *File Name:* `{file_name}`\n"
-    f"📊 *File Size:* {file_size}\n\n"
-    f"🔗 *Here is Your Direct Link:*\n"
-    f"`{link}`\n\n"
-    f"🌟 *Powered By* @BhramsBots\n\n"
-    f"📁 *Type:* {file_type}\n"
-    f"🚸 *Note:* Your Link is Stored Safely Until Admins Action !",
-    parse_mode="MARKDOWN",
-    disable_web_page_preview=True
-)
-
+                update.message.reply_text(
+                    "📥 *Here’s your file!*\n"
+                    "⚠️ Do not share this link.",
+                    parse_mode="MARKDOWN"
+                )
                 return
-
             else:
-                update.message.reply_text("⚠️ Invalid or expired link.")
-                return
-
+                return update.message.reply_text("⚠️ Invalid or expired link.")
         except Exception as e:
             logger.error(f"Error retrieving file: {e}")
-            update.message.reply_text("❌ File not found.")
-            return
+            return update.message.reply_text("❌ File not found.")
 
-    # 4️⃣ Normal welcome message (with dynamic username)
+    # --- Welcome Message ---
     first = update.effective_user.first_name
     username = update.effective_user.username
     raw = first or username or "User"
@@ -147,17 +111,17 @@ message.reply_text(
     update.message.reply_text(
         f"👋 Hi <b>{short_name}</b>!\n\n"
         "✨ <b>Welcome to Free Storage Bot!</b> ✨\n\n"
-        "Send me a file 📁 to store in our database and also you can get download link 🔗.\n"
+        "Send me a file 📁 to store in our database and also you can get a download link 🔗.\n"
         "🔗 Use the File ID or deep link to retrieve it anytime.\n\n"
         "📌 <b>Commands:</b>\n"
-        "• /start – To check if I’m alive\n"
+        "• /start – Restart bot\n"
         "• /help – How to use\n\n"
-        "⚠️ <b>Notice:</b> Do not upload any illegal or adult content, otherwise you’ll be <b>BANNED</b>.",
+        "⚠️ <b>Notice:</b> Do not upload any illegal or adult content, otherwise you'll be <b>BANNED</b>.",
         parse_mode="HTML"
     )
 
 
-# ---------- /announce Handler ----------
+# ---------- /announce ----------
 def announce(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
         return update.message.reply_text("⛔ You are not an admin.")
@@ -182,15 +146,16 @@ def announce(update: Update, context: CallbackContext):
         try:
             bot.send_message(chat_id=int(user_id), text=announcement_text)
             sent += 1
-            time.sleep(0.03)  # safe speed
+            time.sleep(0.03)
         except Exception:
             failed += 1
-            continue
 
     update.message.reply_text(
         f"✅ Broadcast Complete!\nSent: {sent}\nFailed: {failed}"
     )
 
+
+# ---------- Ban / Unban ----------
 def ban(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
         return update.message.reply_text("⛔ Admin only.")
@@ -200,7 +165,6 @@ def ban(update: Update, context: CallbackContext):
 
     target = context.args[0]
     save_banned(target)
-
     update.message.reply_text(f"🚫 User {target} has been banned.")
 
 
@@ -218,10 +182,9 @@ def unban(update: Update, context: CallbackContext):
         banned.remove(target)
         with open(BANNED_FILE, "w") as f:
             f.write("\n".join(banned))
-
-        update.message.reply_text(f"✅ User {target} is unbanned.")
+        return update.message.reply_text(f"✅ User {target} is unbanned.")
     else:
-        update.message.reply_text("User was not banned.")
+        return update.message.reply_text("User was not banned.")
 
 
 # ---------- /help ----------
@@ -236,13 +199,14 @@ def help_command(update: Update, context: CallbackContext) -> None:
         parse_mode="MARKDOWN"
     )
 
+
 # ---------- File Upload Handler ----------
 def handle_file(update: Update, context: CallbackContext) -> None:
     global file_count
     message = update.message
     user_id = message.from_user.id
 
-    # Check banned user
+    # Banned users cannot upload
     if is_banned(user_id):
         return message.reply_text("⛔ You are banned and cannot upload files.")
 
@@ -251,7 +215,7 @@ def handle_file(update: Update, context: CallbackContext) -> None:
     user_name = message.from_user.full_name or message.from_user.username or "Unknown User"
 
     try:
-        # 1️⃣ Send identity info to your GROUP/CHANNEL before file
+        # 1️⃣ Identity message to your group
         bot.send_message(
             chat_id=GROUP_CHAT_ID,
             text=(
@@ -263,31 +227,56 @@ def handle_file(update: Update, context: CallbackContext) -> None:
             parse_mode="HTML"
         )
 
-        # 2️⃣ Copy actual media/file to your group
+        # 2️⃣ Copy the actual file to your group
         copied_msg = bot.copy_message(
             chat_id=GROUP_CHAT_ID,
             from_chat_id=message.chat_id,
             message_id=message.message_id
         )
 
-        # 3️⃣ File link generation
+        # Generate file ID for retrieval
         file_id = generate_file_id(user_id, copied_msg.message_id)
         file_count += 1
         bot_username = context.bot.username
         link = f"https://t.me/{bot_username}?start={file_id}"
 
-        # 4️⃣ Reply to user
+        # -------- Detailed message to user --------
+        file_name = "Unknown"
+        file_size = "Unknown"
+        file_type = "Media"
+
+        if message.document:
+            file_name = message.document.file_name
+            file_size = f"{round(message.document.file_size / (1024 * 1024), 2)} MB"
+            file_type = "Document"
+        elif message.photo:
+            file_name = "Photo"
+            file_type = "Photo"
+        elif message.video:
+            file_name = "Video"
+            file_size = f"{round(message.video.file_size / (1024 * 1024), 2)} MB"
+            file_type = "Video"
+        elif message.audio:
+            file_name = message.audio.file_name or "Audio"
+            file_size = f"{round(message.audio.file_size / (1024 * 1024), 2)} MB"
+            file_type = "Audio"
+
         message.reply_text(
-            f"🎉 Your file is uploaded!\n\n"
-            f"🔗 Direct Link:\n`{link}`\n"
-            f"🆔 Your User ID: `{user_id}`",
+            f"🎉 *Hurray !! Your File has been Uploaded to Our Server*\n\n"
+            f"📂 *File Name:* `{file_name}`\n"
+            f"📊 *File Size:* {file_size}\n\n"
+            f"🔗 *Here is Your Direct Link:*\n"
+            f"`{link}`\n\n"
+            f"🌟 *Powered By* @BhramsBots\n\n"
+            f"📁 *Type:* {file_type}\n"
+            f"🚸 *Note:* Your Link is Stored Safely Until Admins Action !",
             parse_mode="MARKDOWN",
             disable_web_page_preview=True
         )
 
     except Exception as e:
         logger.error(f"Upload error: {e}")
-        message.reply_text("❌ Failed to save your file. Try again.")
+        message.reply_text("❌ Failed to save your file.")
 
 
 # ---------- Flask Setup ----------
