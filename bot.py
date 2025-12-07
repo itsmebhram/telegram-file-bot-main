@@ -4,7 +4,6 @@ import logging
 from flask import Flask, request
 from telegram import Update, Bot
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, CallbackContext
-import html
 import time
 
 # ---------- Config ----------
@@ -44,7 +43,7 @@ def save_user(user_id: int) -> None:
     except Exception as e:
         logger.error(f"Error saving user {user_id}: {e}")
 
-# ---------- Command Handlers ----------
+# ---------- /start Handler ----------
 def start(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
     save_user(user_id)
@@ -60,7 +59,6 @@ def start(update: Update, context: CallbackContext) -> None:
                 original_user = int(original_user)
                 message_id = int(message_id)
 
-                # Retrieve stored file from group
                 bot.copy_message(chat_id=user_id, from_chat_id=GROUP_CHAT_ID, message_id=message_id)
 
                 update.message.reply_text(
@@ -77,9 +75,17 @@ def start(update: Update, context: CallbackContext) -> None:
             update.message.reply_text("❌ File not found or may have been removed.")
             return
 
-    # --- Default welcome message (unchanged) ---
+    # -------- Dynamic Username --------
+    first = update.effective_user.first_name
+    username = update.effective_user.username
+    raw = first or username or "User"
+
+    short_name = raw.strip().split()[0].capitalize()
+    if len(short_name) > 20:
+        short_name = short_name[:19] + "…"
+
     update.message.reply_text(
-        "👋 Hi <b>ɮɦʀǟʍ ( ब्रह्म )</b>!\n\n"
+        f"👋 Hi <b>{short_name}</b>!\n\n"
         "✨ <b>Welcome to Free Storage Bot!</b> ✨\n\n"
         "Send me a file 📁 to store in our database and also you can get download link 🔗.\n"
         "🔗 Use the File ID or deep link to retrieve it anytime.\n\n"
@@ -90,21 +96,51 @@ def start(update: Update, context: CallbackContext) -> None:
         parse_mode="HTML"
     )
 
-# ---------- Other Commands ----------
+
+# ---------- /announce Handler ----------
+def announce(update: Update, context: CallbackContext):
+    if update.effective_user.id != ADMIN_ID:
+        return update.message.reply_text("⛔ You are not an admin.")
+
+    if not context.args:
+        return update.message.reply_text("Usage: /announce Your message here")
+
+    announcement_text = " ".join(context.args)
+
+    if not os.path.exists(USERS_FILE):
+        return update.message.reply_text("No users found.")
+
+    update.message.reply_text("📢 Starting broadcast…")
+
+    sent = 0
+    failed = 0
+
+    with open(USERS_FILE, "r") as f:
+        users = [u.strip() for u in f if u.strip()]
+
+    for user_id in users:
+        try:
+            bot.send_message(chat_id=int(user_id), text=announcement_text)
+            sent += 1
+            time.sleep(0.03)  # safe speed
+        except Exception:
+            failed += 1
+            continue
+
+    update.message.reply_text(
+        f"✅ Broadcast Complete!\nSent: {sent}\nFailed: {failed}"
+    )
+
+
+# ---------- /help ----------
 def help_command(update: Update, context: CallbackContext) -> None:
     bot_username = context.bot.username
     update.message.reply_text(
         "📌 *How to Use this Bot:*\n\n"
-        "1. Send any file (document, photo, video, etc).\n"
-        "2. Receive a *File ID* and *deep link*.\n"
-        "3. Use the File ID or link to get your file:\n\n"
+        "1. Send any file.\n"
+        "2. Receive a File ID and deep link.\n"
+        "3. Retrieve anytime using the link:\n\n"
         f"https://t.me/{bot_username}?start=<FileID>",
-        parse_mode="MARKDOWN"
-    )
-
-def stats(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text(
-        f"📊 Total files saved this session: *{file_count}*",
         parse_mode="MARKDOWN"
     )
 
@@ -115,58 +151,29 @@ def handle_file(update: Update, context: CallbackContext) -> None:
     user_id = message.from_user.id
     save_user(user_id)
 
-    if message.document or message.photo or message.video or message.audio:
-        try:
-            # Copy message instead of forwarding
-            copied_msg = bot.copy_message(
-                chat_id=GROUP_CHAT_ID,
-                from_chat_id=message.chat_id,
-                message_id=message.message_id
-            )
+    try:
+        copied_msg = bot.copy_message(
+            chat_id=GROUP_CHAT_ID,
+            from_chat_id=message.chat_id,
+            message_id=message.message_id
+        )
 
-            file_id = generate_file_id(user_id, copied_msg.message_id)
-            file_count += 1
-            bot_username = context.bot.username
+        file_id = generate_file_id(user_id, copied_msg.message_id)
+        file_count += 1
+        bot_username = context.bot.username
 
-            # Extract details
-            file_name = "Unknown"
-            file_size = "Unknown"
-            file_type = "Media"
+        link = f"https://t.me/{bot_username}?start={file_id}"
 
-            if message.document:
-                file_name = message.document.file_name
-                file_size = f"{round(message.document.file_size / (1024 * 1024), 2)} MB"
-                file_type = "Document"
-            elif message.photo:
-                file_name = "Photo"
-                file_type = "Photo"
-            elif message.video:
-                file_name = "Video"
-                file_size = f"{round(message.video.file_size / (1024 * 1024), 2)} MB"
-                file_type = "Video"
-            elif message.audio:
-                file_name = message.audio.file_name or "Audio"
-                file_size = f"{round(message.audio.file_size / (1024 * 1024), 2)} MB"
-                file_type = "Audio"
+        message.reply_text(
+            f"🎉 Your file is uploaded!\n\n"
+            f"🔗 Direct Link:\n`{link}`",
+            parse_mode="MARKDOWN",
+            disable_web_page_preview=True
+        )
 
-            link = f"https://t.me/{bot_username}?start={file_id}"
-
-            message.reply_text(
-                f"🎉 *Hurray !! Your File has been Uploaded to Our Server*\n\n"
-                f"📂 *File Name:* `{file_name}`\n"
-                f"📊 *File Size:* {file_size}\n\n"
-                f"🔗 *Here is Your Direct Link:*\n"
-                f"`{link}`\n\n"
-                f"🌟 *Powered By* @BhramsBots\n\n"
-                f"📁 *Type:* {file_type}\n"
-                f"🚸 *Note:* Your Link is Stored Safely Until Admins Action !",
-                parse_mode="MARKDOWN",
-                disable_web_page_preview=True
-            )
-
-        except Exception as e:
-            logger.error(f"Upload error: {e}")
-            message.reply_text("❌ Failed to save your file. Try again.")
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        message.reply_text("❌ Failed to save your file. Try again.")
 
 # ---------- Flask Setup ----------
 app = Flask(__name__)
@@ -184,8 +191,8 @@ def webhook():
 # ---------- Dispatcher ----------
 dispatcher = Dispatcher(bot, None, workers=4)
 dispatcher.add_handler(CommandHandler("start", start))
+dispatcher.add_handler(CommandHandler("announce", announce))
 dispatcher.add_handler(CommandHandler("help", help_command))
-dispatcher.add_handler(CommandHandler("stats", stats))
 dispatcher.add_handler(MessageHandler(Filters.all & ~Filters.command, handle_file))
 
 # ---------- Main ----------
