@@ -13,6 +13,7 @@ GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "-1002909394259"))
 ADMIN_ID = int(os.getenv("ADMIN_ID", "1317903617"))
 USERS_FILE = os.getenv("USERS_FILE", "users.txt")
 BANNED_FILE = "banned.txt"
+HISTORY_FILE = "history.txt"   # <--- NEW for history feature
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable is missing!")
@@ -59,96 +60,125 @@ def save_banned(user_id):
 def is_banned(user_id):
     return str(user_id) in load_banned()
 
+# ---------- HISTORY SYSTEM ----------
+def save_history(user_id, file_name, link):
+    if not os.path.exists(HISTORY_FILE):
+        open(HISTORY_FILE, "w").close()
+
+    with open(HISTORY_FILE, "a") as f:
+        f.write(f"{user_id}|{file_name}|{link}\n")
+
+def get_user_history(user_id, limit=5):
+    if not os.path.exists(HISTORY_FILE):
+        return []
+
+    with open(HISTORY_FILE, "r") as f:
+        lines = [line.strip() for line in f if line.strip()]
+
+    records = [l for l in lines if l.startswith(str(user_id) + "|")]
+    return records[-limit:]
+
 # ---------- URL Upload Handler ----------
 def handle_url_upload(update: Update, context: CallbackContext):
     message = update.message
-    user_id = message.from_user.id
     url = message.text.strip()
+    user_id = message.from_user.id
 
-    # Notify user
-    message.reply_text("📥 Downloading file from URL, please wait…")
+    message.reply_text("📥 Downloading from URL, please wait…")
 
     try:
-        r = requests.get(url, allow_redirects=True, timeout=20)
+        r = requests.get(url, allow_redirects=True, timeout=15)
         if r.status_code != 200:
-            return message.reply_text("❌ Failed to download file from the provided URL.")
+            return message.reply_text("❌ Failed to download file from URL.")
 
         filename = url.split("/")[-1] or "file"
-        temp_path = f"/tmp/{filename}"
+        temp = f"/tmp/{filename}"
 
-        with open(temp_path, "wb") as f:
+        with open(temp, "wb") as f:
             f.write(r.content)
 
-        # Upload to your storage group
         sent = bot.send_document(
             chat_id=GROUP_CHAT_ID,
-            document=open(temp_path, "rb")
+            document=open(temp, "rb")
         )
 
         file_id = generate_file_id(user_id, sent.message_id)
         bot_username = context.bot.username
         link = f"https://t.me/{bot_username}?start={file_id}"
 
-        # Reply to user
+        save_history(user_id, filename, link)
+
         message.reply_text(
-            f"🎉 *Your URL File is Uploaded Successfully!*\n\n"
+            f"🎉 *URL File Uploaded Successfully!*\n\n"
             f"📂 *File:* `{filename}`\n"
-            f"🔗 *Direct Link:* `{link}`\n",
+            f"🔗 *Link:* `{link}`",
             parse_mode="MARKDOWN"
         )
 
-        os.remove(temp_path)
+        os.remove(temp)
 
     except Exception as e:
-        logger.error(f"URL upload error: {e}")
-        message.reply_text("❌ Could not download file. URL may be invalid.")
+        logger.error(e)
+        message.reply_text("❌ Could not download this URL. Invalid or blocked.")
+
+# ---------- HISTORY COMMAND ----------
+def history(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    records = get_user_history(user_id)
+
+    if not records:
+        return update.message.reply_text("📭 You have no upload history yet.")
+
+    msg = "📜 *Your Recent Uploads:*\n\n"
+    c = 1
+
+    for r in records:
+        uid, fname, link = r.split("|")
+        msg += f"{c}️⃣ *{fname}*\n🔗 `{link}`\n\n"
+        c += 1
+
+    update.message.reply_text(msg, parse_mode="MARKDOWN", disable_web_page_preview=True)
 
 # ---------- /start ----------
 def start(update: Update, context: CallbackContext) -> None:
-    # Banned users blocked
     if is_banned(update.effective_user.id):
-        return update.message.reply_text("⛔ You are banned from using this bot because of inappropriate uploads.")
+        return update.message.reply_text("⛔ You are banned from using this bot.")
 
     user_id = update.effective_user.id
     save_user(user_id)
     args = context.args
 
-    # Deep-link file download
     if args:
         try:
             file_id = args[0]
             parts = file_id.split("_")
-            if len(parts) == 3:
-                _, orig_user, message_id = parts
-                bot.copy_message(
-                    chat_id=user_id,
-                    from_chat_id=GROUP_CHAT_ID,
-                    message_id=int(message_id)
-                )
-                return update.message.reply_text(
-                    "📥 *Here’s your file!*\n⚠️ Do not share this link.",
-                    parse_mode="MARKDOWN"
-                )
-            else:
-                return update.message.reply_text("⚠️ Invalid or expired link.")
+            _, original_user, msg_id = parts
+
+            bot.copy_message(
+                chat_id=user_id,
+                from_chat_id=GROUP_CHAT_ID,
+                message_id=int(msg_id)
+            )
+
+            return update.message.reply_text(
+                "📥 *Here’s your file!*",
+                parse_mode="MARKDOWN"
+            )
         except:
             return update.message.reply_text("❌ File not found or removed.")
 
-    first = update.effective_user.first_name
-    username = update.effective_user.username
-    raw = first or username or "User"
-    short_name = raw.strip().split()[0].capitalize()[:20]
+    name = update.effective_user.first_name or "User"
+    name = name.split()[0].capitalize()[:20]
 
     update.message.reply_text(
-        f"👋 Hi <b>{short_name}</b>!\n\n"
-        "✨ <b>Welcome to Free Storage Bot!</b> ✨\n\n"
-        "Send any file 📁 or URL 🔗 to store it safely.\n"
-        "Retrieve anytime using deep links.\n\n"
-        "📌 Commands:\n/start\n/help\n",
+        f"👋 Hi <b>{name}</b>!\n\n"
+        "✨ <b>Welcome to Free Storage Bot</b>\n"
+        "Send any file or URL to upload.\n"
+        "Use /history to view your last 5 uploads.",
         parse_mode="HTML"
     )
 
-# ---------- /announce ----------
+# ---------- ANNOUNCE ----------
 def announce(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
         return update.message.reply_text("⛔ Admin only.")
@@ -157,11 +187,11 @@ def announce(update: Update, context: CallbackContext):
         return update.message.reply_text("Usage: /announce message")
 
     msg = " ".join(context.args)
+    sent = failed = 0
 
     with open(USERS_FILE, "r") as f:
-        users = [u.strip() for u in f if u.strip()]
+        users = f.read().splitlines()
 
-    sent, failed = 0, 0
     update.message.reply_text("📢 Broadcasting…")
 
     for uid in users:
@@ -172,9 +202,9 @@ def announce(update: Update, context: CallbackContext):
         except:
             failed += 1
 
-    update.message.reply_text(f"✅ Done!\nSent: {sent}\nFailed: {failed}")
+    update.message.reply_text(f"Done.\nSent: {sent}\nFailed: {failed}")
 
-# ---------- Ban Commands ----------
+# ---------- BAN ----------
 def ban(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
         return update.message.reply_text("⛔ Admin only.")
@@ -184,8 +214,10 @@ def ban(update: Update, context: CallbackContext):
 
     uid = context.args[0]
     save_banned(uid)
+
     update.message.reply_text(f"🚫 User {uid} banned.")
 
+# ---------- UNBAN ----------
 def unban(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
         return update.message.reply_text("⛔ Admin only.")
@@ -200,83 +232,77 @@ def unban(update: Update, context: CallbackContext):
         banned.remove(uid)
         with open(BANNED_FILE, "w") as f:
             f.write("\n".join(banned))
+
         update.message.reply_text(f"✅ User {uid} unbanned.")
     else:
         update.message.reply_text("User not banned.")
 
-# ---------- /help ----------
+# ---------- HELP ----------
 def help_command(update: Update, context: CallbackContext):
     bot_username = context.bot.username
     update.message.reply_text(
-        "📌 *Bot Guide:*\n\n"
-        "• Send any file to upload\n"
-        "• Send any URL to upload its file\n"
-        "• Retrieve stored files anytime using:\n"
-        f"https://t.me/{bot_username}?start=<FileID>",
+        f"📌 *How to use this bot:*\n\n"
+        f"• Send any file to upload\n"
+        f"• Send any URL to upload\n"
+        f"• /history → Show last 5 uploads\n"
+        f"• Retrieve files via deep-link\n",
         parse_mode="MARKDOWN"
     )
 
-# ---------- File Upload Handler ----------
+# ---------- FILE UPLOAD HANDLER ----------
 def handle_file(update: Update, context: CallbackContext) -> None:
     global file_count
     message = update.message
 
-    # ⭐ URL upload detection
+    # URL upload check
     if message.text and message.text.startswith("http"):
         return handle_url_upload(update, context)
 
     user_id = message.from_user.id
-
     if is_banned(user_id):
         return message.reply_text("⛔ You are banned.")
 
     save_user(user_id)
-
     user_name = message.from_user.full_name or message.from_user.username or "Unknown User"
 
     try:
-        # Identity report
         bot.send_message(
             GROUP_CHAT_ID,
             f"📨 <b>New Upload</b>\n👤 {user_name}\n🆔 <code>{user_id}</code>",
             parse_mode="HTML"
         )
 
-        # Copy to storage
-        copied_msg = bot.copy_message(
-            GROUP_CHAT_ID,
-            message.chat_id,
-            message.message_id
+        copied = bot.copy_message(
+            GROUP_CHAT_ID, message.chat_id, message.message_id
         )
 
-        # Generate link
-        file_id = generate_file_id(user_id, copied_msg.message_id)
-        file_count += 1
+        file_id = generate_file_id(user_id, copied.message_id)
         bot_username = context.bot.username
         link = f"https://t.me/{bot_username}?start={file_id}"
 
-        # Extract file details
+        file_count += 1
+
+        # extract details
         file_name = "Unknown"
         file_size = "Unknown"
         file_type = "Media"
 
         if message.document:
             file_name = message.document.file_name
-            file_size = f"{round(message.document.file_size/1024/1024,2)} MB"
+            file_size = f"{round(message.document.file_size/1024/1024, 2)} MB"
             file_type = "Document"
         elif message.photo:
             file_name = "Photo"
-            file_type = "Photo"
         elif message.video:
             file_name = "Video"
             file_size = f"{round(message.video.file_size/1024/1024,2)} MB"
-            file_type = "Video"
         elif message.audio:
             file_name = message.audio.file_name or "Audio"
             file_size = f"{round(message.audio.file_size/1024/1024,2)} MB"
-            file_type = "Audio"
 
-        # Reply
+        # 🔥 SAVE HISTORY
+        save_history(user_id, file_name, link)
+
         message.reply_text(
             f"🎉 *Hurray !! Your File has been Uploaded to Our Server*\n\n"
             f"📂 *File Name:* `{file_name}`\n"
@@ -289,7 +315,7 @@ def handle_file(update: Update, context: CallbackContext) -> None:
         )
 
     except Exception as e:
-        logger.error(f"Upload error: {e}")
+        logger.error(e)
         message.reply_text("❌ Upload failed. Try again.")
 
 # ---------- Flask Setup ----------
@@ -312,6 +338,7 @@ dispatcher.add_handler(CommandHandler("announce", announce))
 dispatcher.add_handler(CommandHandler("ban", ban))
 dispatcher.add_handler(CommandHandler("unban", unban))
 dispatcher.add_handler(CommandHandler("help", help_command))
+dispatcher.add_handler(CommandHandler("history", history))   # NEW COMMAND
 dispatcher.add_handler(MessageHandler(Filters.all & ~Filters.command, handle_file))
 
 # ---------- Main ----------
