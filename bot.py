@@ -29,6 +29,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 file_count = 0
+def help_command(update, context):
+    bot_username = context.bot.username
+    update.message.reply_text(
+        "📌 *How to use Free Storage Bot*\n\n"
+        "📁 Send any file to upload\n"
+        "🌐 Send image URL (jpg/png/webp under 10MB)\n"
+        "🕒 /history – View last 5 uploads\n\n"
+        f"🔗 Access files:\nhttps://t.me/{bot_username}?start=<FileID>\n\n"
+        "⚠️ Adult or illegal content = permanent ban",
+        parse_mode="MARKDOWN"
+    )
+
 
 # ---------- Helper ----------
 def generate_file_id(user_id, message_id):
