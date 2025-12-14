@@ -241,14 +241,14 @@ def run_broadcast(text):
     with open(USERS_FILE, "r") as f:
         users = [u.strip() for u in f if u.strip()]
 
-    for uid in users:
-        try:
-            bot.send_message(chat_id=int(uid), text=text)
-            sent += 1
-            time.sleep(0.03)
-except:
-    failed += 1
-    save_banned(uid)  # optional auto-clean
+for uid in users:
+    try:
+        bot.send_message(chat_id=int(uid), text=text)
+        sent += 1
+        time.sleep(0.03)
+    except Exception:
+        failed += 1
+
 
     # final report to admin
     try:
