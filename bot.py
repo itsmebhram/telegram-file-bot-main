@@ -201,6 +201,17 @@ def start(update, context):
         "⚠️ Adult or illegal content = Ban",
         parse_mode="HTML"
     )
+def help_command(update, context):
+    bot_username = context.bot.username
+    update.message.reply_text(
+        "📌 *How to use Free Storage Bot*\n\n"
+        "📁 Send any file to upload\n"
+        "🌐 Send image URL (jpg/png/webp under 10MB)\n"
+        "🕒 /history – View last 5 uploads\n\n"
+        f"🔗 Access files anytime:\nhttps://t.me/{bot_username}?start=<FileID>\n\n"
+        "⚠️ Adult or illegal content = permanent ban",
+        parse_mode="MARKDOWN"
+    )
 
 # ---------- ANNOUNCE ----------
 def announce(update, context):
@@ -235,8 +246,9 @@ def run_broadcast(text):
             bot.send_message(chat_id=int(uid), text=text)
             sent += 1
             time.sleep(0.03)
-        except:
-            failed += 1
+except:
+    failed += 1
+    save_banned(uid)  # optional auto-clean
 
     # final report to admin
     try:
