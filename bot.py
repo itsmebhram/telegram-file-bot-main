@@ -1,4 +1,5 @@
 # bot.py (Render-ready, optimized for Render)
+import threading
 import os
 import logging
 import requests
@@ -209,19 +210,47 @@ def announce(update, context):
     if not context.args:
         return update.message.reply_text("Usage: /announce text")
 
-    txt = " ".join(context.args)
+    text = " ".join(context.args)
 
-    sent = failed = 0
-    for uid in open(USERS_FILE):
-        uid = uid.strip()
+    # reply immediately (IMPORTANT)
+    update.message.reply_text("📢 Broadcast started…")
+
+    # run sending in background
+    threading.Thread(
+        target=run_broadcast,
+        args=(text,)
+    ).start()
+def run_broadcast(text):
+    sent = 0
+    failed = 0
+
+    if not os.path.exists(USERS_FILE):
+        return
+
+    with open(USERS_FILE, "r") as f:
+        users = [u.strip() for u in f if u.strip()]
+
+    for uid in users:
         try:
-            bot.send_message(uid, txt)
+            bot.send_message(chat_id=int(uid), text=text)
             sent += 1
             time.sleep(0.03)
         except:
             failed += 1
 
-    update.message.reply_text(f"Done.\nSent: {sent}\nFailed: {failed}")
+    # final report to admin
+    try:
+        bot.send_message(
+            chat_id=ADMIN_ID,
+            text=(
+                "✅ Broadcast completed\n\n"
+                f"📤 Sent: {sent}\n"
+                f"⚠️ Failed: {failed}"
+            )
+        )
+    except:
+        pass
+
 
 # ---------- Ban / Unban ----------
 def ban(update, context):
