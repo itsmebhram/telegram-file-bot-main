@@ -170,15 +170,6 @@ def handle_url(update, context):
     try: waiting.delete()
     except: pass
 
-    msg.reply_text(
-        f"🎉 *Image Uploaded Successfully!*\n\n"
-        f"📂 *File:* `{filename}`\n"
-        f"🔗 *Direct Link:* `{link}`\n\n"
-        f"🌟 *Powered By* @BhramsBots",
-        parse_mode="MARKDOWN"
-    )
-
-    os.remove(temp_path)
 
 # ---------- START ----------
 def start(update, context):
@@ -234,6 +225,7 @@ def announce(update, context):
             failed += 1
 
     update.message.reply_text(f"Done.\nSent: {sent}\nFailed: {failed}")
+
 
 # ---------- Ban / Unban ----------
 def ban(update, context):
@@ -307,10 +299,22 @@ def handle_file(update, context):
 
     save_history(uid, "File", link)
 
-    msg.reply_text(
-        f"🎉 File uploaded!\n\n🔗 `{link}`",
-        parse_mode="MARKDOWN"
-    )
+file_name = msg.document.file_name if msg.document else "Unknown File"
+file_size = msg.document.file_size if msg.document else 0
+file_size_mb = round(file_size / (1024 * 1024), 2)
+
+msg.reply_text(
+    f"🎉 *Hurray !! Your File has been Uploaded to Our Server*\n\n"
+    f"📂 *File Name:* `{file_name}`\n"
+    f"📊 *File Size:* `{file_size_mb} MB`\n\n"
+    f"🔗 *Here is Your Direct Link:*\n"
+    f"`{link}`\n\n"
+    f"🌟 *Powered By* @BhramsBots\n\n"
+    f"📁 *Type:* Document\n"
+    f"🚸 *Note:* Your Link is Stored Safely Until Admins Action !",
+    parse_mode="MARKDOWN"
+)
+
 
 # ---------- Flask ----------
 app = Flask(__name__)
@@ -330,11 +334,11 @@ dispatcher = Dispatcher(bot, None, workers=4)
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("help", help_command))
 dispatcher.add_handler(CommandHandler("history", history))
-dispatcher.add_handler(CommandHandler("announce", announce))
 dispatcher.add_handler(CommandHandler("ban", ban))
 dispatcher.add_handler(CommandHandler("unban", unban))
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_url))
 dispatcher.add_handler(MessageHandler(Filters.all & ~Filters.command, handle_file))
+dispatcher.add_handler(CommandHandler("announce", announce))
 
 # ---------- Main ----------
 if __name__ == "__main__":
