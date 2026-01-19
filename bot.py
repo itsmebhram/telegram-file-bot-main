@@ -6,6 +6,8 @@ import tempfile
 import time
 from flask import Flask, request
 from telegram import Update, Bot
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import CallbackQueryHandler
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, CallbackContext
 
 # ---------- Config ----------
@@ -49,13 +51,17 @@ def is_user_joined(user_id, context):
         return False
 
 def force_join_message(update):
+    keyboard = [
+        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{FORCE_CHANNEL.replace('@','')}")],
+        [InlineKeyboardButton("✅ I Joined", callback_data="verify_join")]
+    ]
+
     update.message.reply_text(
         "🚫 *Access Denied*\n\n"
         "You must join our channel to use this bot.\n\n"
-        "👉 Join here:\n"
-        f"https://t.me/{FORCE_CHANNEL.replace('@','')}\n\n"
-        "After joining, come back and try again.",
+        "After joining, click *I Joined*.",
         parse_mode="MARKDOWN",
+        reply_markup=InlineKeyboardMarkup(keyboard),
         disable_web_page_preview=True
     )
 # ---------- Helper ----------
@@ -336,6 +342,18 @@ def handle_file(update, context):
         parse_mode="MARKDOWN"
     )
 
+def verify_join(update, context):
+    query = update.callback_query
+    user_id = query.from_user.id
+
+    if is_user_joined(user_id, context):
+        query.answer("✅ Verified!")
+        query.message.edit_text(
+            "✅ *Verification successful!*\n\nYou can now use the bot.",
+            parse_mode="MARKDOWN"
+        )
+    else:
+        query.answer("❌ You have not joined yet!", show_alert=True)
 
 # ---------- Flask ----------
 app = Flask(__name__)
@@ -352,6 +370,7 @@ def webhook():
 
 # ---------- Dispatcher ----------
 dispatcher = Dispatcher(bot, None, workers=4)
+dispatcher.add_handler(CallbackQueryHandler(verify_join, pattern="verify_join"))
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("help", help_command))
 dispatcher.add_handler(CommandHandler("history", history))
