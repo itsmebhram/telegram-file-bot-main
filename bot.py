@@ -10,6 +10,7 @@ from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, Ca
 
 # ---------- Config ----------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+FORCE_CHANNEL = "@BhramsBots"  # without https://t.me/
 GROUP_CHAT_ID = int(os.getenv("GROUP_CHAT_ID", "-1002909394259"))
 ADMIN_ID = int(os.getenv("ADMIN_ID", "1317903617"))
 USERS_FILE = os.getenv("USERS_FILE", "users.txt")
@@ -40,8 +41,23 @@ def help_command(update, context):
         "⚠️ Adult or illegal content = permanent ban",
         parse_mode="MARKDOWN"
     )
+def is_user_joined(user_id, context):
+    try:
+        member = context.bot.get_chat_member(FORCE_CHANNEL, user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except:
+        return False
 
-
+def force_join_message(update):
+    update.message.reply_text(
+        "🚫 *Access Denied*\n\n"
+        "You must join our channel to use this bot.\n\n"
+        "👉 Join here:\n"
+        f"https://t.me/{FORCE_CHANNEL.replace('@','')}\n\n"
+        "After joining, come back and try again.",
+        parse_mode="MARKDOWN",
+        disable_web_page_preview=True
+    )
 # ---------- Helper ----------
 def generate_file_id(user_id, message_id):
     return f"{int(time.time())}_{user_id}_{message_id}"
@@ -173,6 +189,8 @@ def handle_url(update, context):
 
 # ---------- START ----------
 def start(update, context):
+    if not is_user_joined(update.effective_user.id, context):
+        return force_join_message(update)
     user = update.effective_user
     uid = user.id
 
@@ -274,6 +292,9 @@ def history(update, context):
 def handle_file(update, context):
     msg = update.message
     uid = msg.from_user.id
+
+    if not is_user_joined(uid, context):
+        return force_join_message(update)
 
     # if it's a URL, let handle_url handle it
     if msg.text and (msg.text.startswith("http://") or msg.text.startswith("https://")):
