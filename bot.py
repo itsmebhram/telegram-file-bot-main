@@ -299,21 +299,21 @@ def handle_file(update, context):
 
     save_history(uid, "File", link)
 
-file_name = msg.document.file_name if msg.document else "Unknown File"
-file_size = msg.document.file_size if msg.document else 0
-file_size_mb = round(file_size / (1024 * 1024), 2)
+    file_name = msg.document.file_name if msg.document else "Unknown File"
+    file_size = msg.document.file_size if msg.document else 0
+    file_size_mb = round(file_size / (1024 * 1024), 2)
 
-msg.reply_text(
-    f"🎉 *Hurray !! Your File has been Uploaded to Our Server*\n\n"
-    f"📂 *File Name:* `{file_name}`\n"
-    f"📊 *File Size:* `{file_size_mb} MB`\n\n"
-    f"🔗 *Here is Your Direct Link:*\n"
-    f"`{link}`\n\n"
-    f"🌟 *Powered By* @BhramsBots\n\n"
-    f"📁 *Type:* Document\n"
-    f"🚸 *Note:* Your Link is Stored Safely Until Admins Action !",
-    parse_mode="MARKDOWN"
-)
+    msg.reply_text(
+        f"🎉 *Hurray !! Your File has been Uploaded to Our Server*\n\n"
+        f"📂 *File Name:* `{file_name}`\n"
+        f"📊 *File Size:* `{file_size_mb} MB`\n\n"
+        f"🔗 *Here is Your Direct Link:*\n"
+        f"`{link}`\n\n"
+        f"🌟 *Powered By* @BhramsBots\n\n"
+        f"📁 *Type:* Document\n"
+        f"🚸 *Note:* Your Link is Stored Safely Until Admins Action !",
+        parse_mode="MARKDOWN"
+    )
 
 
 # ---------- Flask ----------
