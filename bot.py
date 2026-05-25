@@ -83,7 +83,7 @@ def is_user_joined(user_id, context):
 
 def force_join_message(update):
     keyboard = [
-    [InlineKeyboardButton("📢 Join Bonus channel ", url="https://t.me/+nndBvmQBvLthZGFl")],
+    # [InlineKeyboardButton("📢 Join Bonus channel ", url="https://t.me/+nndBvmQBvLthZGFl")],
     [InlineKeyboardButton("📢 Join Channel 1", url="https://telegram.me/+AyLDRuPW1TliNzA9")],
     # [InlineKeyboardButton("📢 Join Channel 1", url="https://telegram.me/Earning_Flash")],
     
